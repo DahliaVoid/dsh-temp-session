@@ -2,8 +2,6 @@
   "name": "dsh-temp-session",
   "version": "0.1.0",
   "description": "Optional workspace selection + workspace-free temporary sessions for DeepSeek Harness Web (dsh).",
-  "type": "module",
-  "license": "MIT",
   "keywords": [
     "dsh",
     "plugin",
@@ -11,6 +9,17 @@
     "workspace",
     "temp-session"
   ],
+  "homepage": "https://github.com/DahliaVoid/dsh-temp-session#readme",
+  "bugs": {
+    "url": "https://github.com/DahliaVoid/dsh-temp-session/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DahliaVoid/dsh-temp-session.git"
+  },
+  "license": "MIT",
+  "author": "",
+  "type": "module",
   "exports": {
     ".": {
       "default": "./lib/index.js"
@@ -21,12 +30,18 @@
     "./package.json": "./package.json"
   },
   "main": "lib/index.js",
+  "directories": {
+    "lib": "lib"
+  },
   "files": [
     "lib",
     "cordis.patch.yml",
     "README.md",
     "LICENSE"
   ],
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
   "dsh": {
     "client": {
       "inject": [
