@@ -1,0 +1,42 @@
+{
+  "name": "dsh-temp-session",
+  "version": "0.1.0",
+  "description": "Optional workspace selection + workspace-free temporary sessions for DeepSeek Harness Web (dsh).",
+  "type": "module",
+  "license": "MIT",
+  "keywords": [
+    "dsh",
+    "plugin",
+    "deepseek-harness",
+    "workspace",
+    "temp-session"
+  ],
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "default": "./lib/client.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "main": "lib/index.js",
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "client": {
+      "inject": [
+        "sessions",
+        "workspaces"
+      ],
+      "platform": "web"
+    },
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

@@ -1,0 +1,12 @@
+# dsh-temp-session bundle patch —— 把本插件的行挂入 web profile。
+#
+# 一个行同时承担两种角色（与 dsh-tauri-worktree 相同）：
+#   - 行内 `name` 指向本包，主机侧按此加载 lib/index.js（HTTP 路由 / 清理 / 提示注入）；
+#   - 节点半区（dsh-client-modules）扫描包内的 `dsh.client` 声明，经
+#     exports["./client"] 提供浏览器名册，并服务 /plugins/dsh-temp-session/client.js。
+- insert:
+    - id: dsh-temp-session-host
+      name: dsh-temp-session
+      config:
+        # 每个临时会话的独立工作目录根：$DSH_HOME/tmp-sessions/<sessionId>
+        tempRoot: !!js dshHomePath('tmp-sessions')

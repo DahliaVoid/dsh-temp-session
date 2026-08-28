@@ -1,0 +1,95 @@
+# dsh-temp-session
+
+DeepSeek Harness Web (dsh) 插件：**工作区可选化 + 免工作区临时会话**。
+
+- 未选定工作区时，Hero 工作区入口显示 **「选择工作区（可选）」**（点击行为与原选择菜单完全一致）；
+- 已选定工作区时，入口内**下拉箭头原位变成 ×**：鼠标悬停到大按钮上时箭头自动变 ×，点击 × 取消工作区选择（回到未选定状态）；点击按钮其他区域仍是正常打开工作区选择；
+- 未选择工作区的会话 = **临时会话**：独占一个独立目录 `$DSH_HOME/tmp-sessions/session-<uuid>`（默认即 `~/.dsh/tmp-sessions/…`），会话的 cwd、沙盒写边界、侧边栏归组（Ungrouped）全部自动以该目录为准，与 dsh 安装目录及彼此之间相互独立；
+- 侧边栏通用 **「新建会话」** 按钮（未指定工作区时）默认直接创建临时会话；工作区行内的 **+** 仍创建该工作区的会话（原行为不变）。
+
+## 来源与依赖
+
+- 宿主半区：`lib/index.js` —— 注册 `POST /api/dsh-temp-session/reserve`（预留独立目录）、启动清理、临时会话语义提示注入、**内核客户端补丁安装器**。零 `@deepseek-ai/*` 运行依赖。
+- 浏览器半区：`lib/client.js` —— 纯 DOM/状态对账 + store 订阅，无构建步骤、无第三方 import。
+- 适配对象：dsh 0.1.1-rc.x 的 web profile（基于对 `dsh-client-ui-conversation` 的 WorkspaceChip / 插槽结构的代码级校验）。
+
+## 内核客户端补丁（可选工作区的关键）
+
+dsh 在 `workspaces.phase === "ready"` 时会把"无工作区会话"的 `chipTitle` 置空，
+进而使组合输入框整体失效（必须选工作区）。该逻辑是 React 闭包状态，插件层面
+无法覆盖，因此本插件在**每次启动时**对安装的内核文件
+`@deepseek-ai/dsh-client-ui-conversation/lib/client.js` 做一行幂等替换
+（去掉 `workspaces.phase === "ready"` 这一条件），让无工作区会话也能获得 cwd
+标签 → 输入框可输入、可发送。
+
+- 首次修补前自动备份为 `client.js.dsh-temp-session.bak`；已修补则跳过；
+- 补丁带标记 `/* dsh-temp-session */`，可随时检查（`Select-String -SimpleMatch`）；
+- 恢复原状：把 `.bak` 复制回 `client.js`（或升级 dsh 内核后重新安装本插件）；
+- 若内核升级改动了目标代码，插件启动日志会输出 **"conversation bundle drifted"**，
+  此时需更新插件版本以匹配新内核。
+
+## 安装
+
+方式一（已发布到 npm / GitHub 后）：
+
+```bat
+dsh plugin --profile web add dsh-temp-session
+:: 或 GitHub 安装：
+dsh plugin --profile web add github:<你的用户名>/dsh-temp-session
+```
+
+`dsh plugin add` 会把包写入 `~/.dsh/profiles/web/package.json` 的依赖与 `dsh.profile.bundles`，无需手改。
+
+方式二（本机开发安装，用 `link:` 指向源码目录）：
+
+```bat
+dsh plugin --profile web add link:C:\Users\<User Name>\dsh-temp-session
+```
+
+> 注意：`dsh plugin` 内部经 cmd shell 拼接参数，**路径含空格时会被截断**（例如用户名含空格时）。
+> 此时改为直接调 pnpm（在 `~/.dsh/profiles/web` 下执行）：
+> `pnpm add "link:C:/Users/<User Name>/dsh-temp-session"`
+> 然后再手动把 `dsh-temp-session` 追加进 `dsh.profile.bundles`。
+
+方式三（手动）：编辑 `~/.dsh/profiles/web/package.json`：
+
+```jsonc
+{
+  "dependencies": {
+    "dsh-temp-session": "^0.1.0"          // 已发布：用版本；未发布：用 link: 指向本地源码目录
+  },
+  "dsh": {
+    "profile": {
+      "bundles": [ /* 追加 */ "dsh-temp-session" ]
+    }
+  }
+}
+```
+
+随后在 profile 目录（`~/.dsh/profiles/web`）执行 `pnpm install`（或直接由 desktop 的插件面板管理）。
+
+**生效方式**：修改 profile 后需**重启 Harness 进程**（桌面版：退出并重新打开 App；内置 Web 界面会随内核重启加载新 bundle 行）。
+
+## 目录约定
+
+| 项目 | 值 |
+|---|---|
+| 临时会话根目录 | `~/.dsh/tmp-sessions/`（行配置 `tempRoot` 可改） |
+| 单个会话目录 | `<tempRoot>/session-<uuid>` |
+| 临时会话日志 | 仍写入 `~/.dsh/sessions/`（与普通会话一致） |
+
+## 行为细节与已知边界
+
+- **沙盒**：临时会话的 `workspace-write` 写边界 = 该会话自己的临时目录（会话创建后 `header.cwd` 即为此目录，`dsh-sandbox-policy` 据此解析）。dsh 沙盒对**读取**不设限（设计如此），因此"不读取 dsh 主目录"由 cwd/上下文提示软性引导实现；如需硬性读隔离，需要上游扩展新的沙盒模式 — 欢迎向 [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) 提议。
+- **重启物化**：workspace 注册表会按会话 cwd 把目录物化为一条 Workspace 记录；本插件在每次启动时自动注销 `tmp-sessions/` 下目录的这类记录，使临时会话始终以 Ungrouped 出现（会话与日志不受影响）。
+- **空白临时会话**：未发送任何消息的临时会话不产生日志，重启后自然消失（符合"临时"语义）。
+- **自动预建**：仅当界面处于"无当前会话、无最近工作区可自动连接"时才自动预建临时空白会话；有工作区时仍保留上游"自动恢复最近会话"的行为，通过 × 到达未选定状态。
+- **遗留空白会话**：从工作区 × 切换后，原空白会话会被保留（隐藏但可复用，之后再次选择该工作区时会被复用），不会重复堆积。
+
+## 卸载
+
+```bat
+dsh plugin --profile web remove dsh-temp-session
+```
+
+或从 `~/.dsh/profiles/web/package.json` 删除依赖与 bundles 条目，然后重启 Harness。
