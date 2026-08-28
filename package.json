@@ -1,6 +1,6 @@
 {
   "name": "dsh-temp-session",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Optional workspace selection + workspace-free temporary sessions for DeepSeek Harness Web (dsh).",
   "keywords": [
     "dsh",
