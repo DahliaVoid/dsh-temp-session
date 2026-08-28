@@ -30,12 +30,12 @@ dsh 在 `workspaces.phase === "ready"` 时会把"无工作区会话"的 `chipTit
 
 ## 安装
 
-方式一（已发布到 npm / GitHub 后）：
+方式一：
 
 ```bat
 dsh plugin --profile web add dsh-temp-session
 :: 或 GitHub 安装：
-dsh plugin --profile web add github:<你的用户名>/dsh-temp-session
+dsh plugin --profile web add github:DahliaVoid/dsh-temp-session
 ```
 
 `dsh plugin add` 会把包写入 `~/.dsh/profiles/web/package.json` 的依赖与 `dsh.profile.bundles`，无需手改。
@@ -43,12 +43,12 @@ dsh plugin --profile web add github:<你的用户名>/dsh-temp-session
 方式二（本机开发安装，用 `link:` 指向源码目录）：
 
 ```bat
-dsh plugin --profile web add link:C:\Users\<User Name>\dsh-temp-session
+dsh plugin --profile web add link:PATH_TO_DSH_TEMP_SESSION
 ```
 
 > 注意：`dsh plugin` 内部经 cmd shell 拼接参数，**路径含空格时会被截断**（例如用户名含空格时）。
 > 此时改为直接调 pnpm（在 `~/.dsh/profiles/web` 下执行）：
-> `pnpm add "link:C:/Users/<User Name>/dsh-temp-session"`
+> `pnpm add "link:PATH_TO_DSH_TEMP_SESSION"`
 > 然后再手动把 `dsh-temp-session` 追加进 `dsh.profile.bundles`。
 
 方式三（手动）：编辑 `~/.dsh/profiles/web/package.json`：
@@ -80,7 +80,7 @@ dsh plugin --profile web add link:C:\Users\<User Name>\dsh-temp-session
 
 ## 行为细节与已知边界
 
-- **沙盒**：临时会话的 `workspace-write` 写边界 = 该会话自己的临时目录（会话创建后 `header.cwd` 即为此目录，`dsh-sandbox-policy` 据此解析）。dsh 沙盒对**读取**不设限（设计如此），因此"不读取 dsh 主目录"由 cwd/上下文提示软性引导实现；如需硬性读隔离，需要上游扩展新的沙盒模式 — 欢迎向 [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) 提议。
+- **沙盒**：临时会话的 `workspace-write` 写边界 = 该会话自己的临时目录（会话创建后 `header.cwd` 即为此目录，`dsh-sandbox-policy` 据此解析）。dsh 沙盒对**读取**不设限（设计如此），因此"不读取 dsh 主目录"由 cwd/上下文提示软性引导实现；如需硬性读隔离，需要上游扩展新的沙盒模式。
 - **重启物化**：workspace 注册表会按会话 cwd 把目录物化为一条 Workspace 记录；本插件在每次启动时自动注销 `tmp-sessions/` 下目录的这类记录，使临时会话始终以 Ungrouped 出现（会话与日志不受影响）。
 - **空白临时会话**：未发送任何消息的临时会话不产生日志，重启后自然消失（符合"临时"语义）。
 - **自动预建**：仅当界面处于"无当前会话、无最近工作区可自动连接"时才自动预建临时空白会话；有工作区时仍保留上游"自动恢复最近会话"的行为，通过 × 到达未选定状态。
