@@ -11,7 +11,8 @@ DeepSeek Harness Web (dsh) 插件：**工作区可选化 + 免工作区临时会
 
 - 宿主半区：`lib/index.js` —— 注册 `POST /api/dsh-temp-session/reserve`（预留独立目录）、启动清理、临时会话语义提示注入、**内核客户端补丁安装器**。零 `@deepseek-ai/*` 运行依赖。
 - 浏览器半区：`lib/client.js` —— 纯 DOM/状态对账 + store 订阅，无构建步骤、无第三方 import。
-- 适配对象：dsh 0.1.1-rc.x 的 web profile（基于对 `dsh-client-ui-conversation` 的 WorkspaceChip / 插槽结构的代码级校验）。
+- 适配对象：dsh 0.1.2-rc.x 的 web profile（基于对 `dsh-client-ui-conversation` 的 WorkspaceChip / 插槽结构的代码级校验）；
+  详见下方「行为细节」的内核适配说明。
 
 ## 内核客户端补丁（可选工作区的关键）
 
@@ -84,6 +85,10 @@ dsh plugin --profile web add link:PATH_TO_DSH_TEMP_SESSION
 - **重启物化**：workspace 注册表会按会话 cwd 把目录物化为一条 Workspace 记录；本插件在每次启动时自动注销 `tmp-sessions/` 下目录的这类记录，使临时会话始终以 Ungrouped 出现（会话与日志不受影响）。
 - **空白临时会话**：未发送任何消息的临时会话不产生日志，重启后自然消失（符合"临时"语义）。
 - **自动预建**：启动期仅当"无当前会话、无最近工作区可自动连接"时才自动预建临时空白会话；有工作区时仍保留上游"自动恢复最近会话"的行为，通过 × 到达未选定状态。运行期中（删除/归档当前会话导致 `current` 归零）则始终自动补建——上游的初始选择是一次性启动策略，此后不会再行动，不补位的话 hero 输入框会因"无当前会话"被内核判为 inert（显示"选择一个工作区开始"且无法输入）。
+- **内核适配（0.1.2-rc.x）**：`workspaces` 快照改为 `{ items, archivedSessionIds, state, phase, error }`（0.1.1-rc.x 的 `baselinesReady`/`recentWorkspaceId` 已移除），"新建会话"无参入口也从 `workspaces.startSession` 迁至 `uiWorkspace.startSession`。0.1.2 起插件：
+  - `autoEnsure` 就绪守卫改用 `phase === "ready"`，最近工作区按上游同款算法（`items` + 会话列表 `byId` 的 `updatedAt` 最大值）实时复算；
+  - 拦截 `uiWorkspace.startSession()` 的无参调用（工作区行的 + 与显式选工作区仍走原路径），旧 `workspaces.startSession` 补丁保留以兼容早期内核；
+  - reconcile 在"已选定工作区"分支把芯片标签断言回工作区标题——修复清空全部工作区后首次创建会话时标签残留下"选择工作区（可选）"的问题（该时序下 reconcile 可能先于工作区归属的快照事件写入可选文案，而 React 对标签节点不再重渲染，只能由插件自身修回）。
 - **遗留空白会话**：从工作区 × 切换后，原空白会话会被保留（隐藏但可复用，之后再次选择该工作区时会被复用），不会重复堆积。
 
 ## 卸载
