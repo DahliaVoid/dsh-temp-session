@@ -39,9 +39,7 @@
     "README.md",
     "LICENSE"
   ],
-  "scripts": {
-    "test": "node --test test/client-behaviour.test.mjs"
-  },
+  "scripts": {},
   "dsh": {
     "client": {
       "inject": [

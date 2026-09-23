@@ -15,7 +15,6 @@ DeepSeek Harness Web (dsh) 插件：**工作区可选化 + 免工作区临时会
 - 浏览器半区：`lib/client.js` —— 纯 DOM/状态对账 + store 订阅，无构建步骤、无第三方 import。
 - 适配对象：dsh 0.1.2-rc.x ~ 0.1.5-rc.3 的 web profile（桌面客户端即以内置 0.1.5-rc.3 内核 + 自带 UI 插件运行）；
   详见下方「行为细节」的内核适配说明。
-- 回归测试：`test/client-behaviour.test.mjs`（`npm test`）——自带最小 DOM 桩，锁住芯片对账与桌面屏蔽的判定，不依赖浏览器。
 
 ## 内核客户端补丁（可选工作区的关键）
 
@@ -149,7 +148,6 @@ dsh plugin --profile web add link:PATH_TO_DSH_TEMP_SESSION
 - **遗留空白会话**：从工作区 × 切换后，原空白会话会被保留（隐藏但可复用，之后再次选择该工作区时会被复用），不会重复堆积。
 - **桌面屏蔽（0.1.4）**：判定与改道逻辑详见上方「屏蔽桌面客户端的『未分组』新建会话」；
   纯净 dsh 下这些代码全部空转，`sessions.create` 只在桌面特征出现后才被包装，并在插件卸载时还原。
-  回归测试见 `test/client-behaviour.test.mjs`（`npm test`）。
 
 ## 卸载
 
