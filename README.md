@@ -6,6 +6,7 @@ DeepSeek Harness Web (dsh) 插件：**工作区可选化 + 免工作区临时会
 - 已选定工作区时，入口内**下拉箭头原位变成 ×**：鼠标悬停到大按钮上时箭头自动变 ×，点击 × 取消工作区选择（回到未选定状态）；点击按钮其他区域仍是正常打开工作区选择；
 - 未选择工作区的会话 = **临时会话**：独占一个独立目录 `$DSH_HOME/tmp-sessions/session-<uuid>`（默认即 `~/.dsh/tmp-sessions/…`），会话的 cwd、沙盒写边界、侧边栏归组（Ungrouped）全部自动以该目录为准，与 dsh 安装目录及彼此之间相互独立；
 - 侧边栏通用 **「新建会话」** 按钮（未指定工作区时）默认直接创建临时会话；工作区行内的 **+** 仍创建该工作区的会话（原行为不变）；
+- 兼容 dsh **0.1.7-rc.1** 的"首次启动自动创建默认工作区"：默认工作区由内核照常创建与命名（本插件让位，不抢跑），本插件只接管"未选工作区"的那部分语义（见「0.1.7 适配」）；
 - **桌面客户端（DeepSeek Harness Desktop / dsh-tauri ≥ 0.15.9）自带的「未分组」新建会话会被本插件屏蔽**，
   从侧边栏、分组行到 Hero 芯片全部回到本插件的语义（详见「屏蔽桌面客户端的『未分组』新建会话」）。
 
@@ -13,8 +14,35 @@ DeepSeek Harness Web (dsh) 插件：**工作区可选化 + 免工作区临时会
 
 - 宿主半区：`lib/index.js` —— 注册 `POST /api/dsh-temp-session/reserve`（预留独立目录）、启动清理、临时会话语义提示注入、**内核客户端补丁安装器**。零 `@deepseek-ai/*` 运行依赖。
 - 浏览器半区：`lib/client.js` —— 纯 DOM/状态对账 + store 订阅，无构建步骤、无第三方 import。
-- 适配对象：dsh 0.1.2-rc.x ~ 0.1.5-rc.3 的 web profile（桌面客户端即以内置 0.1.5-rc.3 内核 + 自带 UI 插件运行）；
-  详见下方「行为细节」的内核适配说明。
+- 适配对象：dsh 0.1.2-rc.x ~ **0.1.7-rc.1** 的 web profile（桌面客户端即以内置内核 + 自带 UI 插件运行）；
+  详见下方「行为细节」的内核适配说明。0.1.7 的内核 API 变更与对应改法见「0.1.7 适配」一节。
+
+## 0.1.7 适配（0.1.5）
+
+dsh **0.1.7-rc.1** 新增「全新安装首次启动时自动创建默认工作区和空白会话」（内核
+`restoreSelection` → `initializeDefault`）。该功能只建**一个**临时性质的默认工作区，
+不为每个会话建立隔离目录；本插件的"每会话独立工作区"因此照旧成立，但内核同时改动的
+四处客户端行为会让本插件整体失效：
+
+| 症状 | 根因（0.1.7 的变更） | 本插件的改法 |
+|---|---|---|
+| 芯片文案恒为「选择工作区（可选）」，选了工作区也不变、悬停不出 × | 会话列表快照 `{ ids, byId, phase, projectionsBySession }` **不再有 `current` 字段**（旧版用它表达"当前会话"）；客户端 Session 改为多实例共存后，主视图归属改由会话摘要的引用计数表达：`byId[id].retainedBy.mainView > 0`（内核 `dsh-client-ui-layout` 的窗口标题就是这么取的）。取不到当前会话 → 对账永远走"未选定工作区"分支 | 新增 `currentSessionIdOf()`：优先用引用计数，兼容旧字段 |
+| 点 × 静默无响应、"新建会话"点了没反应 | `ctx.sessions` 的服务面**已无 `open`**（切换当前会话的旧入口），导航统一到 `uiWorkspace.openSession(target)` | 新增 `focusSession()`：优先 `uiWorkspace.openSession`，仅在无 uiWorkspace 的旧内核上回退 `sessions.open` |
+| 同上（第二重原因） | `uiWorkspace` 服务由 `ui-workspace` 在启动清单更靠后的位置提供；声明依赖的插件才会被排到其后，未声明时 `ctx.get("uiWorkspace")` 恒为 `undefined` | `package.json` 的 `dsh.client.inject` 与 `lib/client.js` 的 `exports.inject` 同步补上 `uiWorkspace` |
+| 点了 × 之后芯片文案已正确，但**输入框仍不可用**（占位符变成「选择一个工作区开始」） | 插件复用了一个**已归档的**空白临时会话：工作区快照的 `archivedSessionIds` 是全局归档集合，插件此前不看它；内核打开归档会话会立刻释放其引用（日志里的 `Session reference "…" is released`），而 `openSession` 是**静默返回、界面原地不动** → 没有当前会话 → 内核把组合输入框判为 inert | ① `findExistingTempBlank` / `isOnBlankTempSession` 一律**排除已归档会话**（`isArchivedSession`）；② 新增 `focusTempSessionWithHeal`：切换后回读当前会话确认生效（`waitForCurrent`），未生效就用**全新预留**的临时会话重试一次，彻底消除"复用陈旧会话"的死路 |
+| （潜在回归）全新安装时本插件抢先建出临时会话，内核的默认工作区功能被顶掉 | 内核那条分支的前提是"无工作区**且无会话**"，插件兜底一旦先建会话，条件永不成立；而 0.1.7 的默认工作区创建是**异步主机往返**（建目录、注册工作区、建会话），耗时不确定 | `autoEnsure` 启动期改为**观测内核动作**后让位：包装 `workspaces.initializeDefault`/`create`（在途计数）与 `uiWorkspace.openWorkspace`/`openSession`，只要内核还在初始化或还在打开工作区就不预建；安静期（1.5s，硬上限 20s）过后、且确实没有可接入的工作区时才补位。运行期（删除/归档当前会话后）不受此限制，立即补位 |
+
+> 默认工作区落点是 `~/Documents/deepseek-harness/默认工作区`，由内核创建与命名；
+> 本插件不干预它，只负责让"未选工作区"的会话各自独占 `~/.dsh/tmp-sessions/session-<uuid>`。
+
+**验证方式**（在 0.1.7-rc.1 上实测）：全新 DSH_HOME 首次启动 → 默认工作区与空白会话正常
+创建、输入框可用；点 × → 切到独立临时目录会话（`tmp-sessions/session-<uuid>` 被创建）、
+文案回到「选择工作区（可选）」且可输入；再从菜单选回工作区 → 文案变回工作区名、悬停出现 ×；
+侧边栏「新建会话」→ 落点为临时会话。同一套交互在 0.1.5-rc.3 上亦通过（向后兼容）。
+
+> **生效方式**：`uiWorkspace` 依赖声明写在 `package.json` 的 `dsh.client.inject` 里，由启动
+> 清单生成时读取，因此升级到 0.1.7-rc.1 后**需要重启 Harness 进程**（桌面版：退出并重开
+> App）才能生效；仅刷新页面只会拿到旧的依赖声明。
 
 ## 内核客户端补丁（可选工作区的关键）
 
@@ -135,11 +163,12 @@ dsh plugin --profile web add link:PATH_TO_DSH_TEMP_SESSION
 - **沙盒**：临时会话的 `workspace-write` 写边界 = 该会话自己的临时目录（会话创建后 `header.cwd` 即为此目录，`dsh-sandbox-policy` 据此解析）。dsh 沙盒对**读取**不设限（设计如此），因此"不读取 dsh 主目录"由 cwd/上下文提示软性引导实现；如需硬性读隔离，需要上游扩展新的沙盒模式。
 - **重启物化**：workspace 注册表会按会话 cwd 把目录物化为一条 Workspace 记录；本插件在每次启动时自动注销 `tmp-sessions/` 下目录的这类记录，使临时会话始终以 Ungrouped 出现（会话与日志不受影响）；同时注销桌面客户端「未分组」功能在 `~/.dsh/ungrouped` 留下的同类记录。
 - **空白临时会话**：未发送任何消息的临时会话不产生日志，重启后自然消失（符合"临时"语义）。
-- **自动预建**：启动期仅当"无当前会话、无最近工作区可自动连接"时才自动预建临时空白会话；有工作区时仍保留上游"自动恢复最近会话"的行为，通过 × 到达未选定状态。运行期中（删除/归档当前会话导致 `current` 归零）则始终自动补建——上游的初始选择是一次性启动策略，此后不会再行动，不补位的话 hero 输入框会因"无当前会话"被内核判为 inert（显示"选择一个工作区开始"且无法输入）。
+- **自动预建**：启动期先让位 `BOOT_YIELD_MS`（3s）给内核的初始选择策略——0.1.7 的"首次启动自动创建默认工作区并接入空白会话"与"恢复最近会话"都在这个窗口内完成；窗口过后仍无当前会话、且没有可接入的工作区时才预建临时空白会话。运行期中（删除/归档当前会话导致当前会话归零）则始终立即补建——内核的初始选择是一次性启动策略，此后不会再行动，不补位的话 hero 输入框会因"无当前会话"被内核判为 inert（显示"选择一个工作区开始"且无法输入）。
 - **内核适配（0.1.2-rc.x）**：`workspaces` 快照改为 `{ items, archivedSessionIds, state, phase, error }`（0.1.1-rc.x 的 `baselinesReady`/`recentWorkspaceId` 已移除），"新建会话"无参入口也从 `workspaces.startSession` 迁至 `uiWorkspace.startSession`。0.1.2 起插件：
   - `autoEnsure` 就绪守卫改用 `phase === "ready"`，最近工作区按上游同款算法（`items` + 会话列表 `byId` 的 `updatedAt` 最大值）实时复算；
   - 拦截 `uiWorkspace.startSession()` 的无参调用（工作区行的 + 与显式选工作区仍走原路径），旧 `workspaces.startSession` 补丁保留以兼容早期内核；
   - reconcile 在"已选定工作区"分支把芯片标签断言回工作区标题——修复清空全部工作区后首次创建会话时标签残留下"选择工作区（可选）"的问题（该时序下 reconcile 可能先于工作区归属的快照事件写入可选文案，而 React 对标签节点不再重渲染，只能由插件自身修回）。
+- **内核适配（0.1.7-rc.1）**：会话列表快照不再有 `current`（改用 `byId[id].retainedBy.mainView`）、`ctx.sessions.open` 被 `uiWorkspace.openSession` 取代、`uiWorkspace` 必须显式声明依赖——三处改动的细节与验证方式见上方「0.1.7 适配」。
 - **临时会话身份校验（0.1.3）**：桌面外壳 / 第三方插件也可能创建"空白 + 无工作区"的会话
   （例如按项目目录预建的空会话，cwd 是真实项目目录）。0.1.3 起复用/识别临时会话时增加
   硬校验：**cwd 末段必须等于会话 id 且 id 形如 `session-<uuid>`**（本插件创建的临时会话
